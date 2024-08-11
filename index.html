@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MDS and DEG Analysis</title>
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #4a90e2;
+        }
+        .container {
+            display: flex;
+            justify-content: space-between;
+            width: 80%;
+            margin: 20px auto;
+        }
+        .box {
+            width: 45%;
+            height: 300px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .sample {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+            cursor: pointer;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        .sample:hover {
+            background-color: #e6f7ff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        .dragging {
+            opacity: 0.5;
+        }
+        button {
+            display: block;
+            width: 200px;
+            margin: 20px auto;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background-color: #4a90e2;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #357ab8;
+        }
+        .radio-group {
+            text-align: center;
+            margin: 20px;
+        }
+        .radio-group label {
+            margin: 0 10px;
+        }
+        #plot, #degPlot {
+            width: 600px;
+            height: 600px;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .group-container {
+            display: flex;
+            justify-content: space-between;
+            width: 80%;
+            margin: 20px auto;
+        }
+        .group-box {
+            width: 45%;
+            height: 300px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .deg-list {
+            width: 80%;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 10px;
+        }
+        .deg-list table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .deg-list th, .deg-list td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .deg-list th {
+            background-color: #f2f2f2;
+        }
+        .error-message {
+            color: red;
+            text-align: center;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload RNA Sequencing Data</h1>
+    <form id="uploadForm" enctype="multipart/form-data" style="text-align: center; margin: 20px;">
+        <input type="file" id="fileInput" name="file" accept=".csv,.txt" style="margin-bottom: 10px;">
+        <button type="submit">Upload</button>
+    </form>
+    <div id="sampleSelection" style="display:none;">
+        <h2>Select Samples for Analysis</h2>
+        <div class="container">
+            <div class="box" id="allSamplesBox">
+                <h3>All Samples</h3>
+            </div>
+            <div class="box" id="selectedSamplesBox">
+                <h3>Selected Samples</h3>
+            </div>
+        </div>
+        <div class="radio-group">
+            <label>
+                <input type="radio" name="mdsType" value="2d" checked> 2D MDS Plot
+            </label>
+            <label>
+                <input type="radio" name="mdsType" value="3d"> 3D MDS Plot
+            </label>
+        </div>
+        <button id="generateMdsButton">Generate MDS Plot</button>
+    </div>
+    <div id="plot"></div>
+    <div class="group-container" style="display:none;">
+        <div class="group-box" id="testBox">
+            <h3>Test</h3>
+        </div>
+        <div class="group-box" id="controlBox">
+            <h3>Control</h3>
+        </div>
+    </div>
+    <button id="generateDegButton" style="display:none;">Perform DEG Analysis</button>
+    <div id="degPlot"></div>
+    <div class="deg-list" id="degList" style="display:none;">
+        <h2>Top 1000 Differentially Expressed Genes (DEGs)</h2>
+        <table id="degTable">
+            <thead>
+                <tr>
+                    <th>Gene</th>
+                    <th>Test Group Samples</th>
+                    <th>Control Group Samples</th>
+                    <th>Mean Difference</th>
+                    <th>P-Value</th>
+                </tr>
+            </thead>
+            <tbody id="degListBody">
+            </tbody>
+        </table>
+    </div>
+    <div class="error-message" id="errorMessage" style="display:none;"></div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.js"></script>
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const allSamplesBox = document.getElementById('allSamplesBox');
+                allSamplesBox.innerHTML = '<h3>All Samples</h3>';
+                data.samples.forEach(sample => {
+                    const div = document.createElement('div');
+                    div.className = 'sample';
+                    div.draggable = true;
+                    div.textContent = sample;
+                    div.addEventListener('dragstart', handleDragStart);
+                    div.addEventListener('dragend', handleDragEnd);
+                    allSamplesBox.appendChild(div);
+                });
+                document.getElementById('sampleSelection').style.display = 'block';
+            } else {
+                const errorData = await response.json();
+                document.getElementById('errorMessage').textContent = errorData.error;
+                document.getElementById('errorMessage').style.display = 'block';
+            }
+        });
+
+        function handleDragStart(event) {
+            event.dataTransfer.setData('text/plain', event.target.textContent);
+            event.dataTransfer.effectAllowed = 'move';
+            event.target.classList.add('dragging');
+        }
+
+        function handleDragEnd(event) {
+            event.target.classList.remove('dragging');
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            const data = event.dataTransfer.getData('text/plain');
+            const draggingElement = document.querySelector('.dragging');
+            if (draggingElement) {
+                draggingElement.classList.remove('dragging');
+                draggingElement.remove();
+            }
+            const div = document.createElement('div');
+            div.className = 'sample';
+            div.draggable = true;
+            div.textContent = data;
+            div.addEventListener('dragstart', handleDragStart);
+            div.addEventListener('dragend', handleDragEnd);
+            event.currentTarget.appendChild(div);
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+        }
+
+        function handleDropBack(event) {
+            event.preventDefault();
+            const data = event.dataTransfer.getData('text/plain');
+            const draggingElement = document.querySelector('.dragging');
+            if (draggingElement) {
+                draggingElement.classList.remove('dragging');
+                draggingElement.remove();
+            }
+            const allSamplesBox = document.getElementById('allSamplesBox');
+            const div = document.createElement('div');
+            div.className = 'sample';
+            div.draggable = true;
+            div.textContent = data;
+            div.addEventListener('dragstart', handleDragStart);
+            div.addEventListener('dragend', handleDragEnd);
+            allSamplesBox.appendChild(div);
+        }
+
+        document.getElementById('allSamplesBox').addEventListener('drop', handleDropBack);
+        document.getElementById('allSamplesBox').addEventListener('dragover', handleDragOver);
+
+        document.getElementById('selectedSamplesBox').addEventListener('drop', handleDrop);
+        document.getElementById('selectedSamplesBox').addEventListener('dragover', handleDragOver);
+
+        document.getElementById('generateMdsButton').addEventListener('click', async () => {
+            const selectedSamples = Array.from(document.getElementById('selectedSamplesBox').children)
+                .filter(child => child.className === 'sample')
+                .map(child => child.textContent);
+            const mdsType = document.querySelector('input[name="mdsType"]:checked').value;
+            const response = await fetch('/generate_mds', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ samples: selectedSamples, mdsType: mdsType })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log("MDS plot data:", data);  // Debugging
+                // Render the MDS plot using the data
+                // For example, you can use a library like Plotly.js to render the plot
+                if (mdsType === '2d') {
+                    Plotly.newPlot('plot', [{
+                        x: data.plotData.x,
+                        y: data.plotData.y,
+                        text: data.plotData.text,
+                        mode: 'markers',
+                        type: 'scatter'
+                    }]);
+                } else {
+                    Plotly.newPlot('plot', [{
+                        x: data.plotData.x,
+                        y: data.plotData.y,
+                        z: data.plotData.z,
+                        text: data.plotData.text,
+                        mode: 'markers',
+                        type: 'scatter3d'
+                    }]);
+                }
+                document.querySelector('.group-container').style.display = 'flex';
+                document.getElementById('generateDegButton').style.display = 'block';
+
+                // Automatically assign samples to Test and Control groups
+                const testBox = document.getElementById('testBox');
+                const controlBox = document.getElementById('controlBox');
+                testBox.innerHTML = '<h3>Test</h3>';
+                controlBox.innerHTML = '<h3>Control</h3>';
+                selectedSamples.forEach((sample, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'sample';
+                    div.draggable = true;
+                    div.textContent = sample;
+                    div.addEventListener('dragstart', handleDragStart);
+                    div.addEventListener('dragend', handleDragEnd);
+                    if (index % 2 === 0) {
+                        testBox.appendChild(div);
+                    } else {
+                        controlBox.appendChild(div);
+                    }
+                });
+            } else {
+                const errorData = await response.json();
+                document.getElementById('errorMessage').textContent = errorData.error;
+                document.getElementById('errorMessage').style.display = 'block';
+            }
+        });
+
+        document.getElementById('testBox').addEventListener('drop', handleDrop);
+        document.getElementById('testBox').addEventListener('dragover', handleDragOver);
+
+        document.getElementById('controlBox').addEventListener('drop', handleDrop);
+        document.getElementById('controlBox').addEventListener('dragover', handleDragOver);
+
+        document.getElementById('generateDegButton').addEventListener('click', async () => {
+            const testSamples = Array.from(document.getElementById('testBox').children)
+                .filter(child => child.className === 'sample')
+                .map(child => child.textContent);
+            const controlSamples = Array.from(document.getElementById('controlBox').children)
+                .filter(child => child.className === 'sample')
+                .map(child => child.textContent);
+            const response = await fetch('/generate_deg', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ test: testSamples, control: controlSamples })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log("DEG plot data:", data);  // Debugging
+                // Render the DEG plot using the data
+                // For example, you can use a library like Plotly.js to render the plot
+                Plotly.newPlot('degPlot', [{
+                    x: data.plotData.x,
+                    y: data.plotData.y,
+                    text: data.plotData.text,
+                    mode: 'markers',
+                    type: 'scatter',
+                    marker: {
+                        color: data.plotData.color,
+                        size: data.plotData.size
+                    }
+                }]);
+
+                // Display the DEG list
+                const degList = data.topDegs;
+                const degListBody = document.getElementById('degListBody');
+                degListBody.innerHTML = '';
+                degList.forEach(deg => {
+                    const row = document.createElement('tr');
+                    const geneCell = document.createElement('td');
+                    geneCell.textContent = deg.Gene;
+                    const testSamplesCell = document.createElement('td');
+                    testSamplesCell.textContent = testSamples.join(', ');
+                    const controlSamplesCell = document.createElement('td');
+                    controlSamplesCell.textContent = controlSamples.join(', ');
+                    const meanDiffCell = document.createElement('td');
+                    meanDiffCell.textContent = deg['Mean Difference'];
+                    const pValueCell = document.createElement('td');
+                    pValueCell.textContent = deg['P-Value'];
+                    row.appendChild(geneCell);
+                    row.appendChild(testSamplesCell);
+                    row.appendChild(controlSamplesCell);
+                    row.appendChild(meanDiffCell);
+                    row.appendChild(pValueCell);
+                    degListBody.appendChild(row);
+                });
+                document.getElementById('degList').style.display = 'block';
+                $('#degTable').DataTable();  // Initialize DataTables
+            } else {
+                const errorData = await response.json();
+                document.getElementById('errorMessage').textContent = errorData.error;
+                document.getElementById('errorMessage').style.display = 'block';
+            }
+        });
+    </script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</body>
+</html>
